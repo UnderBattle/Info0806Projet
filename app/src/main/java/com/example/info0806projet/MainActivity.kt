@@ -17,6 +17,9 @@ import android.net.TrafficStats
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.Environment
+import android.telephony.CellInfo
+import android.telephony.CellInfoLte
+import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,8 +38,11 @@ import androidx.core.content.ContextCompat
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.example.info0806projet.ui.theme.Info0806ProjetTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
@@ -76,6 +82,7 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
     private var lastTimestamp by mutableLongStateOf(0L)
     private var nCol by mutableIntStateOf(0)
     private val collectedData = mutableStateListOf<Map<String, Any>>()
+    private var _antenneInfo by mutableStateOf("Chargement...")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,6 +114,7 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
                         val (ssid, signal) = getWifiInfo(context)
                         _wifiSSID = ssid
                         _wifiSignalStrength = signal
+                        _antenneInfo = getCellTowerInfo()
                         collectedData.add(
                             mapOf(
                                 "timestamp" to System.currentTimeMillis(),
@@ -125,10 +133,14 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
                                 "uploadSpeedInstant" to _uploadSpeedInstant,
                                 "downloadSpeedInstant" to _downloadSpeedInstant,
                                 "uploadSpeedMoy" to _uploadSpeedMoy,
-                                "downloadSpeedMoy" to _downloadSpeedMoy
+                                "downloadSpeedMoy" to _downloadSpeedMoy,
+                                "antenneInfo" to _antenneInfo
                             )
                         )
-                        delay(1000L) // Refresh toutes les 1 secondes
+                        coroutineScope.launch {
+                            envoieLigne()
+                        }
+                        delay(3000L) // Refresh toutes les 3 secondes
                     }
                 }
             }
@@ -270,6 +282,37 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
         }
     }
 
+    private fun envoieLigne() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val py = Python.getInstance()
+            val module = py.getModule("script")
+            val timestamp = System.currentTimeMillis()
+            val readableTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+            val jsonData = mapOf(
+                "Temps" to timestamp,
+                "Temps Lisible" to readableTime,
+                "Latitude" to _latitude,
+                "Longitude" to _longitude,
+                "Vitesse" to _vitesse,
+                "AccelerationX" to _accelX,
+                "AccelerationY" to _accelY,
+                "AccelerationZ" to _accelZ,
+                "WiFi SSID" to _wifiSSID,
+                "Signal WiFi" to _wifiSignalStrength,
+                "Upload Total KB" to _uploadSpeed,
+                "Download Total KB" to _downloadSpeed,
+                "Upload Vitesse KB/s" to _uploadSpeedInstant,
+                "Download Vitesse KB/s" to _downloadSpeedInstant,
+                "Upload Vitesse Moyenne KB/s" to _uploadSpeedMoy,
+                "Download Vitesse Moyenne KB/s" to _downloadSpeedMoy,
+                "Antenne 4G" to _antenneInfo
+            )
+            val jsonString = JSONObject(jsonData).toString()
+            module.callAttr("send_mqtt_message", jsonString)
+            Log.d("MQTT", "Message envoyé : $jsonString")
+        }
+    }
+
     private fun sauvegarderCSV() {
         val nomFichier = "donnees_capteurs.csv"
         val dossierTelechargements = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
@@ -279,13 +322,13 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
             val writer = OutputStreamWriter(outputStream)
 
             // En-tête du fichier CSV
-            //writer.append("Temps, Temps Lisible, Latitude,Longitude,Vitesse,AccélérationX,AccélérationY,AccélérationZ,Humidité,Température,WiFi SSID,Signal WiFi,Upload KB,Download KB, Upload Vitesse KB/s,Download Vitesse KB/s\n")
-            writer.append("Temps,Temps Lisible,Latitude,Longitude,Vitesse,AccélérationX,AccélérationY,AccélérationZ,WiFi SSID,Signal WiFi,Upload Total KB,Download Total KB,Upload Vitesse KB/s,Download Vitesse KB/s, Upload Vitesse Moyenne KB/s, Download Vitesse Moyenne KB/s\n")
+            //writer.append("Temps, Temps Lisible, Latitude,Longitude,Vitesse,AccelerationX,AccelerationY,AccelerationZ,Humidité,Température,WiFi SSID,Signal WiFi,Upload KB,Download KB, Upload Vitesse KB/s,Download Vitesse KB/s,Antenne 4G\n")
+            writer.append("Temps,Temps Lisible,Latitude,Longitude,Vitesse,AccelerationX,AccelerationY,AccelerationZ,WiFi SSID,Signal WiFi,Upload Total KB,Download Total KB,Upload Vitesse KB/s,Download Vitesse KB/s,Upload Vitesse Moyenne KB/s,Download Vitesse Moyenne KB/s,Antenne 4G\n")
             for (data in collectedData) {
                 val timestamp = data["timestamp"] as Long
                 val readableTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
                 //writer.append("${data["timestamp"]}, $readableTime,${data["latitude"]},${data["longitude"]},${data["vitesse"]},${data["accelX"]},${data["accelY"]},${data["accelZ"]},${data["humidity"]},${data["temperature"]},${data["wifiSSID"]},${data["wifiSignalStrength"]},${data["uploadSpeed"]},${data["downloadSpeed"]}, $_uploadSpeedInstant,$_downloadSpeedInstant\n")
-                writer.append("${data["timestamp"]},$readableTime,${data["latitude"]},${data["longitude"]},${data["vitesse"]},${data["accelX"]},${data["accelY"]},${data["accelZ"]},${data["wifiSSID"]},${data["wifiSignalStrength"]},${data["uploadSpeed"]},${data["downloadSpeed"]},${data["uploadSpeedInstant"]},${data["downloadSpeedInstant"]},${data["uploadSpeedMoy"]},${data["downloadSpeedMoy"]}\n")
+                writer.append("${data["timestamp"]},$readableTime,${data["latitude"]},${data["longitude"]},${data["vitesse"]},${data["accelX"]},${data["accelY"]},${data["accelZ"]},${data["wifiSSID"]},${data["wifiSignalStrength"]},${data["uploadSpeed"]},${data["downloadSpeed"]},${data["uploadSpeedInstant"]},${data["downloadSpeedInstant"]},${data["uploadSpeedMoy"]},${data["downloadSpeedMoy"]},\"${data["antenneInfo"]}\"\n")
             }
             writer.flush()
             writer.close()
@@ -293,6 +336,27 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
         } catch (e: Exception) {
             Log.e("CSV", "Erreur lors de l'enregistrement du fichier CSV", e)
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun getCellTowerInfo(): String {
+        val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        val cellInfoList: List<CellInfo> = telephonyManager.allCellInfo
+
+        for (cellInfo in cellInfoList) {
+            if (cellInfo is CellInfoLte) {
+                val cellSignalStrengthLte = cellInfo.cellSignalStrength
+                val cellIdentityLte = cellInfo.cellIdentity
+
+                val cellId = cellIdentityLte.ci
+                val tac = cellIdentityLte.tac
+                val eNbId = cellId / 256
+                val cellCoverage = cellSignalStrengthLte.dbm
+
+                return "Antenne: eNbID=$eNbId, CellID=$cellId, TAC=$tac, Signal=$cellCoverage dBm"
+            }
+        }
+        return "Aucune antenne LTE détectée"
     }
 
     @Composable
@@ -362,6 +426,9 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
             Text(text = "Vitesse réseau actuelle", style = MaterialTheme.typography.headlineSmall)
             Text(text = "Upload: $_uploadSpeedInstant KB/s")
             Text(text = "Download: $_downloadSpeedInstant KB/s")
+
+            Text(text = "Informations Antenne 4G", style = MaterialTheme.typography.headlineSmall)
+            Text(text = "Info Antenne : $_antenneInfo")
 
             Button(onClick = { sauvegarderCSV() }) {
                 Text(text = "Télécharger CSV")
