@@ -49,10 +49,7 @@ import java.io.OutputStreamWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
-//Il faut une moyenne ecart type du réseau
-//Avoir zone recouverte par antenne
-//Rendre 2 avril et soutenance 24 avril
-//Broker Adresse : 194.57.103.203 Port : 1883 Topic : vehicle
+//Broker Adresse : 194.57.103.203 Port : 1883 Topic : antenne
 class MainActivity : ComponentActivity(), SensorEventListener, LocationListener {
     /*private var humiditySensor: Sensor? = null
     private var temperatureSensor: Sensor? = null

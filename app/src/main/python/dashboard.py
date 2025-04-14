@@ -222,19 +222,26 @@ if page == "Accueil":
     #Graphique pour les vitesses de téléchargement et d'upload
     if st.session_state["data"]["Signal"]:
         st.subheader("Graphiques des données")
+        st.subheader("Évolution des Vitesses Réseau dans le Temps")
         fig = go.Figure()
         fig.add_trace(go.Scatter(
+            x=st.session_state["data"]["temps_lisible"],
             y=st.session_state["data"]["download_vitesse_kb_s"],
             mode="lines",
             name="Vitesse de téléchargement (KB/s)",
             line=dict(color='blue')
         ))
         fig.add_trace(go.Scatter(
+            x=st.session_state["data"]["temps_lisible"],
             y=st.session_state["data"]["upload_vitesse_kb_s"],
             mode="lines",
             name="Vitesse d'upload (KB/s)",
             line=dict(color='green')
         ))
+        fig.update_layout(
+            xaxis_title="Temps",
+            yaxis_title="Vitesse (KB/s)"
+        )
         st.plotly_chart(fig, use_container_width=True)
 
         # Graphique de l'évolution du signal 4G
@@ -243,7 +250,6 @@ if page == "Accueil":
         fig_signal = px.line(
             x=st.session_state["data"]["temps_lisible"],
             y=st.session_state["data"]["Signal"],
-            title="Évolution du Signal 4G",
             labels={"Signal": "Puissance du Signal 4G (dBm)", "Temps Lisible": "Temps"},
             line_shape="linear",
             hover_data={"Latitude": st.session_state["data"]["latitude"], "Longitude": st.session_state["data"]["longitude"]}
@@ -260,6 +266,10 @@ if page == "Accueil":
                 for i in range(len(st.session_state["data"]["temps_lisible"])) if changement_antenne[i]
             ]
         )
+        fig_signal.update_layout(
+            xaxis_title="Temps",
+            yaxis_title="Signal"
+        )
         st.plotly_chart(fig_signal)
 
         st.subheader("Distribution des puissances du signal 4G")
@@ -267,7 +277,6 @@ if page == "Accueil":
             st.session_state["data"],
             x="Signal",
             nbins=30,
-            title="Histogramme de la puissance du signal",
             labels={"Signal": "Puissance (dBm)"},
             color_discrete_sequence=["#00CC96"]
         )
@@ -350,7 +359,6 @@ elif page == "Classification kIN":
             st.error(f"Erreur lors de la lecture du fichier CSV: {e}")
     else:
         st.write("Veuillez télécharger un fichier CSV.")
-    st.subheader("Graphiques des données")
     antenne_trajets = {}
     dernier_enb = None
     if not st.session_state["data"]["Signal"]:
