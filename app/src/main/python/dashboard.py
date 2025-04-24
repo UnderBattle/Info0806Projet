@@ -276,7 +276,6 @@ if page == "Accueil":
         fig_hist = px.histogram(
             st.session_state["data"],
             x="Signal",
-            nbins=30,
             labels={"Signal": "Puissance (dBm)"},
             color_discrete_sequence=["#00CC96"]
         )
